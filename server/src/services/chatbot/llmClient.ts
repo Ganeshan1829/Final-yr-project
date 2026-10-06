@@ -1,3 +1,4 @@
+import { liveSelectTool, liveComposeReply, LiveFirstPass } from './openRouterClient.js';
 import { TOOL_DEFINITIONS, executeToolAsync, sanitizeDataText, UserContext, ToolExecutionResult } from './tools.js';
 
 export interface ChatMessage {
@@ -369,6 +370,7 @@ export async function processChatMessage(
   let toolCallName: string | undefined;
   let toolCallArgs: any;
   let directReply: string | undefined;
+  let livePass: LiveFirstPass | undefined;
 
   if (provider === 'mock') {
     const mockRes = runMockLLM(cleanMessage, history, userCtx);
@@ -376,17 +378,20 @@ export async function processChatMessage(
     toolCallArgs = mockRes.toolArgs;
     directReply = mockRes.reply;
   } else {
-    // For live providers (e.g. Gemini / OpenAI), if configured:
-    // Fallback to mock logic if network/API fails or in mock test mode
+    // Live provider (OpenRouter / any OpenAI-compatible API): the model picks a tool via function calling.
+    // On any API failure, fall back to the offline rule matcher so the chatbot keeps working.
     try {
-      // In production with live API keys, provider client would be invoked here.
-      // Here we utilize the mock pattern matcher which conforms exactly to tools.
+      livePass = await liveSelectTool(cleanMessage, history, userCtx, isTamil);
+      toolCallName = livePass.toolCall?.name;
+      toolCallArgs = livePass.toolCall?.args;
+      directReply = livePass.reply;
+    } catch (err: any) {
+      console.warn(`[chatbot] live LLM failed, using offline matcher: ${err.message}`);
+      livePass = undefined;
       const mockRes = runMockLLM(cleanMessage, history, userCtx);
       toolCallName = mockRes.toolName;
       toolCallArgs = mockRes.toolArgs;
       directReply = mockRes.reply;
-    } catch (err: any) {
-      directReply = `LLM call error: ${err.message}`;
     }
   }
 
@@ -461,7 +466,14 @@ export async function processChatMessage(
   }
 
   // 4. For read-only tools, synthesize response purely from tool result
-  const factualReply = formatToolResponseText(toolCallName, toolResult.result, isTamil);
+  let factualReply = formatToolResponseText(toolCallName, toolResult.result, isTamil);
+  if (livePass?.toolCall) {
+    try {
+      factualReply = await liveComposeReply(livePass, toolResult.result);
+    } catch (err: any) {
+      console.warn(`[chatbot] live reply composition failed, using template: ${err.message}`);
+    }
+  }
 
   return {
     reply: factualReply,

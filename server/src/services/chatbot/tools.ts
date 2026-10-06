@@ -541,21 +541,22 @@ export function executeTool(
       case 'get_hours_left': {
         const args = GetHoursLeftSchema.parse(rawArgs);
         let query = `
-          SELECT subject_code, subject_name, section_label, staff_name, required_hours, delivered_hours, shortfall_hours, makeup_approved_hours
-          FROM hours_summary
+          SELECT h.subject_code, h.subject_name, sec.section_label, h.staff_name, h.required_hours, h.delivered_hours, h.shortfall_hours, h.makeup_approved_hours
+          FROM hours_summary h
+          JOIN sections sec ON sec.section_id = h.section_id
           WHERE 1=1
         `;
         const params: any[] = [];
         if (args.subject_code) {
-          query += ' AND (subject_code = ? OR UPPER(subject_code) = UPPER(?))';
-          params.push(args.subject_code, args.subject_code);
+          query += ' AND UPPER(h.subject_code) = UPPER(?)';
+          params.push(args.subject_code);
         }
         if (args.section_id) {
-          query += ' AND (section_label = ? OR section_id = ?)';
+          query += ' AND (sec.section_label = ? OR CAST(h.section_id AS TEXT) = ?)';
           params.push(args.section_id, args.section_id);
         }
 
-        query += ' ORDER BY shortfall_hours DESC';
+        query += ' ORDER BY h.shortfall_hours DESC';
         const rows = db.prepare(query).all(...params);
 
         logAudit(userId, role, toolName, args, 'success');

@@ -14,6 +14,7 @@ export default defineConfig({
     testTimeout: 120000,
     hookTimeout: 120000,
     globalSetup: ['tests/globalSetup.ts'],
-    env: { APP_DATA_DIR: testDataDir },
+    // Force the offline chatbot matcher so tests never call a live LLM (.env may set LLM_PROVIDER)
+    env: { APP_DATA_DIR: testDataDir, LLM_PROVIDER: 'mock', LLM_API_KEY: '' },
   },
 });
