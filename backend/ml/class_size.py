@@ -279,7 +279,14 @@ def predict_class_sizes(requests: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     if not MODEL_FILE.exists():
         raise RuntimeError("Class-size model is not available (not trained or did not beat the baseline).")
-    bundle = joblib.load(MODEL_FILE)
+    try:
+        bundle = joblib.load(MODEL_FILE)
+    except Exception:
+        # Pickle written by a different scikit-learn/xgboost/numpy version: retrain locally and retry once.
+        train_class_size_models()
+        if not MODEL_FILE.exists():
+            raise RuntimeError("Class-size model could not be loaded and retraining did not beat the baseline.")
+        bundle = joblib.load(MODEL_FILE)
     model, feats = bundle["model"], bundle["features"]
 
     flat: List[Dict[str, Any]] = []

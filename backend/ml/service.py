@@ -452,7 +452,11 @@ def generate_predictions(
         run_id = latest_run["id"] if latest_run else None
 
     # Load model
-    model = DemandForecastModel.load(Path(model_row["file_path"]))
+    model_path = Path(model_row["file_path"])
+    if not model_path.exists():
+        # Registry path came from another machine: fall back to the model file of the same name in this checkout.
+        model_path = MODELS_DIR / model_path.name
+    model = DemandForecastModel.load(model_path)
 
     # Prepare input records
     inputs = get_target_inputs(target_year)

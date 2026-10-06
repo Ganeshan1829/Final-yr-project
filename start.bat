@@ -64,6 +64,45 @@ if "%RUN_ML%"=="1" (
   echo %GREEN%[OK]%RESET%    !PY_VER!
 )
 
+
+:: Python is needed by the OR-Tools timetable solver even when the ML service is skipped
+set "PYBIN="
+for %%P in (python py python3) do (
+  if not defined PYBIN (
+    %%P -c "import sys" >nul 2>&1
+    if !errorlevel! equ 0 set "PYBIN=%%P"
+  )
+)
+if not defined PYBIN (
+  echo %RED%[ERROR]%RESET% Python not found. Install Python 3.9-3.13 from https://python.org ^(tick "Add to PATH"^)
+  pause & exit /b 1
+)
+echo %YELLOW%[CHECK]%RESET% Checking Python packages ^(OR-Tools solver^)...
+!PYBIN! -c "import ortools, pandas" >nul 2>&1
+if !errorlevel! neq 0 (
+  echo %YELLOW%[INSTALL]%RESET% Installing solver packages...
+  !PYBIN! -m pip install -r server\engineequirements.txt
+  if !errorlevel! neq 0 (
+    echo %RED%[ERROR]%RESET% pip install failed for server\engineequirements.txt
+    pause & exit /b 1
+  )
+)
+echo %GREEN%[OK]%RESET%    Solver packages present
+if "%RUN_ML%"=="1" (
+  !PYBIN! -c "import fastapi, uvicorn, xgboost, sklearn, pandas, joblib, openpyxl" >nul 2>&1
+  if !errorlevel! neq 0 (
+    echo %YELLOW%[INSTALL]%RESET% Installing ML packages...
+    !PYBIN! -m pip install -r requirements.txt
+    if !errorlevel! neq 0 (
+      echo %RED%[WARN]%RESET% ML packages failed to install - continuing without ML.
+      set "RUN_ML=0"
+    )
+  )
+)
+if not exist ".env" (
+  if exist ".env.example" copy /Y ".env.example" ".env" >nul
+)
+set "PYTHON_BIN=!PYBIN!"
 echo.
 
 if "%RUN_TESTS%"=="1" (
@@ -94,7 +133,7 @@ echo %YELLOW%Press Ctrl+C to stop all services.%RESET%
 echo.
 
 if "%RUN_ML%"=="1" (
-  start "ML Server (port 8000)" cmd /k "title ML Server && python -m uvicorn backend.ml.main:app --port 8000 --host 127.0.0.1 --reload"
+  start "ML Server (port 8000)" cmd /k "title ML Server && !PYBIN! -m uvicorn backend.ml.main:app --port 8000 --host 127.0.0.1 --reload"
   timeout /t 2 /nobreak >nul
 )
 
