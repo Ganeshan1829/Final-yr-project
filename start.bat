@@ -5,8 +5,8 @@ title Smart Timetable System
 :: ============================================================
 ::  Smart Timetable System ? Startup Script
 ::  Usage:
-::    start.bat          -> starts Server + Client
-::    start.bat --ml     -> starts Server + Client + Python ML
+::    start.bat          -> starts Server + Client + Python ML
+::    start.bat --no-ml  -> starts Server + Client only
 ::    start.bat --test   -> runs all tests and exits
 :: ============================================================
 
@@ -24,11 +24,12 @@ echo %CYAN%%BOLD%       Smart Timetable Planning System v1.0            %RESET%
 echo %CYAN%%BOLD%========================================================%RESET%
 echo.
 
-set "RUN_ML=0"
+set "RUN_ML=1"
 set "RUN_TESTS=0"
 
 for %%A in (%*) do (
-  if "%%A"=="--ml"   set "RUN_ML=1"
+  if "%%A"=="--ml"    set "RUN_ML=1"
+  if "%%A"=="--no-ml" set "RUN_ML=0"
   if "%%A"=="--test" set "RUN_TESTS=1"
 )
 
