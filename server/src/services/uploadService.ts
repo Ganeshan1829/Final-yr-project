@@ -8,7 +8,7 @@ import { markRunsStale } from '../db/repositories/etlRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsBaseDir = path.resolve(__dirname, '../../uploads');
+const uploadsBaseDir = process.env.APP_DATA_DIR ? path.resolve(process.env.APP_DATA_DIR, 'uploads') : path.resolve(__dirname, '../../uploads');
 
 export interface UploadRecord {
   id: number;

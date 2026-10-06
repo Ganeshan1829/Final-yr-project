@@ -384,13 +384,20 @@ export const api = {
   forecastRunExportCsvUrl: (runId: number) => `/api/forecast/runs/${runId}/export.csv`,
 
   // Module 3: Engine
-  getEngineStatus: () =>
-    request<{
-      state: EngineState;
-      python: { ready: boolean; version?: string; error?: string };
-      latest_run: SolverRunSummary | null;
-      validation_passed: boolean;
-    }>('/api/engine/status'),
+  // The server reports { environment, validation_status, latest_solver_run, can_proceed }; adapt it to the shape the page uses.
+  getEngineStatus: async () => {
+    const r = await request<any>('/api/engine/status');
+    return {
+      state: r.state as EngineState,
+      python: {
+        ready: Boolean(r.environment?.python_ready),
+        version: r.environment?.ortools_version as string | undefined,
+        error: r.environment?.error as string | undefined,
+      },
+      latest_run: (r.latest_solver_run ?? null) as SolverRunSummary | null,
+      validation_passed: Boolean(r.can_proceed),
+    };
+  },
 
   splitSections: () =>
     request<{
@@ -714,6 +721,23 @@ export interface SplitSectionItem {
   is_lab: number;
   warning_message: string | null;
   student_ids?: string[];
+  /** Why the section has this size: teacher preference/limit, ML recommendation, rule used. */
+  allocation_basis?: AllocationBasis | null;
+}
+
+export interface AllocationBasis {
+  demand_total: number;
+  chosen: number;
+  moved_in: number;
+  moved_out: number;
+  preferred: number;
+  max_effective: number;
+  ml_expected: number | null;
+  soft_target: number;
+  hard_cap: number;
+  rule: 'student_choice' | 'demand_fill' | 'extra_batch';
+  final_size?: number;
+  over_preferred?: boolean;
 }
 
 export interface SolverRunSummary {
@@ -810,7 +834,7 @@ export interface CalendarGenerationSummary {
 // PHASE 3: MANAGEMENT CHANGES & CHATBOT TYPES & API
 // =========================================================================
 
-export type ChangeType = 'leave' | 'event' | 'intake';
+export type ChangeType = 'leave' | 'event' | 'intake' | 'reallocation';
 export type ChangeStatus = 'draft' | 'previewed' | 'applied' | 'reverted' | 'discarded';
 
 export interface ProposedFix {
@@ -836,6 +860,35 @@ export interface ProposedFix {
   reason?: string;
 }
 
+export interface ReallocationSectionOutcome {
+  section_id: number;
+  section_label: string | null;
+  staff_id: string;
+  staff_name: string | null;
+  role: 'source' | 'target';
+  before: number;
+  after: number;
+  preferred: number | null;
+  hard_cap: number | null;
+  ml_expected: number | null;
+}
+
+export interface ReallocationPlan {
+  unavailable_staff_ids: string[];
+  subjects: Array<{
+    subject_code: string;
+    subject_name: string;
+    displaced: number;
+    placed: number;
+    unresolved: number;
+    sections: ReallocationSectionOutcome[];
+  }>;
+  moves: Array<{ student_id: string; subject_code: string; from_section_id: number; to_section_id: number; to_staff_id: string }>;
+  unresolved: Array<{ student_id: string; subject_code: string; section_id: number; reason: string; cause: 'schedule_clash' | 'capacity' | 'no_section' }>;
+  warnings: string[];
+  ml_used: boolean;
+}
+
 export interface ImpactSummary {
   sessions_affected_count: number;
   proposed_fixes: ProposedFix[];
@@ -844,6 +897,8 @@ export interface ImpactSummary {
   shortfall_after: number;
   by_subject_shortfall: Array<{ subject_code: string; before: number; after: number }>;
   new_clashes: number;
+  /** Present for type 'reallocation' */
+  reallocation?: ReallocationPlan;
   diff: Array<{
     session_id?: number;
     description: string;
@@ -1363,3 +1418,121 @@ export function getPdfExportUrl(options?: {
 
 
 
+
+
+// =========================================================================
+// TEACHER-AWARE ALLOCATION API
+// =========================================================================
+
+export interface TeacherPreference {
+  staff_id: string;
+  subject_code: string;
+  preferred_class_size: number | null;
+  max_class_size: number | null;
+  subject_experience_years: number | null;
+  lab_suitability: number | null;
+  admin_override_max: number | null;
+  source: 'feedback' | 'admin' | 'synthetic';
+  updated_at: string;
+}
+
+export interface TeacherFeedbackItem {
+  id: number;
+  staff_id: string;
+  subject_code: string;
+  academic_year: string;
+  class_size: number;
+  overcrowded: number;
+  interaction_quality: number | null;
+  allocation_success: number | null;
+  comment: string | null;
+  source: 'feedback' | 'admin' | 'synthetic';
+}
+
+export interface DistributionSuggestion {
+  subject_code: string;
+  subject_name: string;
+  total_students: number;
+  room_capacity: number;
+  ml_used: boolean;
+  ml_note?: string;
+  teachers: Array<{
+    staff_id: string;
+    staff_name: string | null;
+    students: number;
+    batch_sizes: number[];
+    equal_split_would_be: number;
+    preferred: number;
+    preferred_source: string;
+    max: number;
+    ml_expected: number | null;
+    rule: string;
+    within_preferred: boolean;
+  }>;
+  unallocated: number;
+  warnings: string[];
+}
+
+export interface ClassSizeReport {
+  trained_at?: string;
+  data_origin?: string;
+  rows_total?: number;
+  rows_train?: number;
+  rows_test?: number;
+  split?: string;
+  metrics?: Record<string, { mae: number; rmse: number; r2: number }>;
+  best_ml_model?: string;
+  beats_equal_distribution?: boolean;
+  beats_preferred_proportional?: boolean;
+  model_active?: boolean;
+  note?: string;
+  status?: string;
+}
+
+async function allocationRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/allocation${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', 'x-user-role': getStoredUserRole(), ...(init?.headers || {}) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body?.error?.message || body?.reason || body?.message || (typeof body?.error === 'string' ? body.error : '') || `Request failed (${res.status})`);
+  }
+  return body as T;
+}
+
+export const allocationApi = {
+  distribution: (subject: string, opts: { total?: number; exclude?: string[]; ml?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.total) q.set('total', String(opts.total));
+    if (opts.exclude?.length) q.set('exclude', opts.exclude.join(','));
+    if (opts.ml === false) q.set('ml', '0');
+    return allocationRequest<DistributionSuggestion>(`/distribution/${encodeURIComponent(subject)}?${q.toString()}`);
+  },
+  preferences: (staffId?: string) =>
+    allocationRequest<{ preferences: TeacherPreference[] }>(`/preferences${staffId ? `?staff_id=${encodeURIComponent(staffId)}` : ''}`),
+  savePreference: (p: Partial<TeacherPreference> & { staff_id: string }) =>
+    allocationRequest<{ ok: boolean; preference: TeacherPreference }>('/preferences', { method: 'PUT', body: JSON.stringify(p) }),
+  feedback: (staffId?: string) =>
+    allocationRequest<{ feedback: TeacherFeedbackItem[] }>(`/feedback${staffId ? `?staff_id=${encodeURIComponent(staffId)}` : ''}`),
+  submitFeedback: (f: {
+    staff_id: string;
+    subject_code: string;
+    academic_year: string;
+    class_size: number;
+    overcrowded: boolean;
+    interaction_quality?: number;
+    allocation_success?: number;
+    comment?: string;
+  }) => allocationRequest<{ ok: boolean; id: number }>('/feedback', { method: 'POST', body: JSON.stringify(f) }),
+  refreshPredictions: () =>
+    allocationRequest<{ available: boolean; batch_id: string | null; model?: string; stored: number; reason?: string }>('/predictions/refresh', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  predictions: () =>
+    allocationRequest<{ predictions: Array<{ subject_code: string; staff_id: string; predicted_students: number; model_name: string; created_at: string }> }>('/predictions'),
+  seedSynthetic: () =>
+    allocationRequest<{ ok: boolean; data_origin: string; teachers: number; historical_allocations: number; feedback: number }>('/seed-synthetic', { method: 'POST', body: '{}' }),
+  modelReport: () => fetch('/api/forecast/class-size/report').then((r) => (r.ok ? (r.json() as Promise<ClassSizeReport>) : Promise.reject(new Error('ML service offline')))),
+};

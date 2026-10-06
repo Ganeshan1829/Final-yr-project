@@ -1,5 +1,6 @@
 import { db } from '../../db.js';
 import { getStoredRules } from '../rulesService.js';
+import { allocateSubject, loadLatestPredictions } from './allocationService.js';
 
 export interface SplitSectionResult {
   section_id: number;
@@ -14,6 +15,7 @@ export interface SplitSectionResult {
   is_lab: number;
   warning_message: string | null;
   student_ids: string[];
+  allocation_basis?: Record<string, unknown> | null;
 }
 
 export interface SplitResultSummary {
@@ -28,7 +30,8 @@ export interface SplitResultSummary {
 /**
  * Executes deterministic Section Splitting according to Module 3 specification.
  * - Keeps student staff choices where provided.
- * - Splits students evenly across qualified staff for each subject.
+ * - Distributes the remaining students by teacher capacity/preference/ML recommendation (see allocationEngine.ts),
+ *   NOT as fixed equal sections.
  * - Enforces min_section_size, default_section_size, max_section_size.
  * - Checks staff shortfall and faculty workload limits.
  * - Atomic transaction: replaces previous sections cleanly.
@@ -99,9 +102,11 @@ export function runSectionSplitter(): SplitResultSummary {
     is_lab: number;
     warning_message: string | null;
     student_ids: string[];
+    allocation_basis: Record<string, unknown> | null;
   }> = [];
 
   const staffHoursAssigned = new Map<string, number>();
+  const predictions = loadLatestPredictions();
 
   for (const subj of subjects) {
     const code = subj.subject_code;
@@ -132,75 +137,43 @@ export function runSectionSplitter(): SplitResultSummary {
     const maxRoomCap = roomCapRow?.max_cap || maxSize;
     const effectiveMaxSize = Math.min(maxSize, maxRoomCap);
 
-    // Check staff shortfall error
-    const minStaffNeeded = Math.ceil(totalStudents / maxSize);
-    if (qualifiedStaff.length < minStaffNeeded) {
+    // Teacher-aware, demand-aware allocation (deterministic; ML predictions are advisory targets only).
+    const staffHoursView = new Map<string, { max_hours: number; committed: number; assigned: number }>();
+    for (const q of qualifiedStaff) {
+      const info = staffMap.get(q);
+      staffHoursView.set(q, {
+        max_hours: info?.max_hours_per_week ?? 20,
+        committed: info?.hours_committed_elsewhere ?? 0,
+        assigned: staffHoursAssigned.get(q) || 0,
+      });
+    }
+    const allocation = allocateSubject({
+      subject_code: code,
+      hours_per_week: hours,
+      room_capacity: effectiveMaxSize,
+      min_section_size: minSize,
+      qualified_staff: qualifiedStaff,
+      choices: subjectStudents.filter((s) => s.staff_id).map((s) => ({ student_id: s.student_id, staff_id: s.staff_id })),
+      floating_ids: subjectStudents.filter((s) => !s.staff_id).map((s) => s.student_id),
+      staff_hours: staffHoursView,
+      defaults: { default_size: defaultSize, rules_max: maxSize },
+      predictions,
+    });
+    warnings.push(...allocation.warnings);
+
+    const activeStaffEntries: Array<[string, string[]]> = allocation.allocations.map((a) => [a.staff_id, a.student_ids]);
+    const basisByStaff = new Map(allocation.allocations.map((a) => [a.staff_id, a.basis]));
+
+    if (allocation.unallocated_ids.length > 0) {
+      // Never drop students: report the shortfall and keep them on the teacher with the most headroom.
       errors.push(
-        `Staff shortfall for ${code} (${subj.subject_name}): ${totalStudents} students require at least ${minStaffNeeded} staff for max section size ${maxSize}, but only ${qualifiedStaff.length} qualified staff available.`
+        `Staff shortfall for ${code} (${subj.subject_name}): ${allocation.unallocated_ids.length} of ${totalStudents} students cannot be placed within teacher limits (max class size, room capacity ${effectiveMaxSize}, remaining teaching hours).`
       );
-    }
-
-    // Determine sections and student allocation
-    // If students already chose staff: group by staff
-    const studentsByStaff = new Map<string, string[]>();
-    for (const qStaff of qualifiedStaff) {
-      studentsByStaff.set(qStaff, []);
-    }
-
-    const unassignedStudents: string[] = [];
-    for (const s of subjectStudents) {
-      if (s.staff_id && studentsByStaff.has(s.staff_id)) {
-        studentsByStaff.get(s.staff_id)!.push(s.student_id);
-      } else {
-        unassignedStudents.push(s.student_id);
-      }
-    }
-
-    // List of active sections to create: array of { staffId, studentIds }
-    const activeStaffEntries: Array<[string, string[]]> = [];
-
-    if (unassignedStudents.length > 0 && qualifiedStaff.length > 0) {
-      // Split unassigned cohort into sections of size <= effectiveMaxSize
-      const numSections = Math.max(1, Math.ceil(unassignedStudents.length / effectiveMaxSize));
-      const baseSize = Math.floor(unassignedStudents.length / numSections);
-      let remainder = unassignedStudents.length % numSections;
-
-      let studentIdx = 0;
-      for (let sIdx = 0; sIdx < numSections; sIdx++) {
-        const staffId = qualifiedStaff[sIdx % qualifiedStaff.length];
-        const count = baseSize + (remainder > 0 ? 1 : 0);
-        if (remainder > 0) remainder--;
-
-        const chunk = unassignedStudents.slice(studentIdx, studentIdx + count);
-        studentIdx += count;
-        activeStaffEntries.push([staffId, chunk]);
-      }
-    } else {
-      // Rebalance if uneven beyond effectiveMaxSize
-      for (const qStaff of qualifiedStaff) {
-        const assigned = studentsByStaff.get(qStaff)!;
-        if (assigned.length > effectiveMaxSize) {
-          const excessCount = assigned.length - effectiveMaxSize;
-          const excess = assigned.splice(effectiveMaxSize, excessCount);
-          // Find qualified staff with capacity
-          for (const otherStaff of qualifiedStaff) {
-            if (otherStaff !== qStaff) {
-              const otherList = studentsByStaff.get(otherStaff)!;
-              while (excess.length > 0 && otherList.length < effectiveMaxSize) {
-                otherList.push(excess.shift()!);
-              }
-            }
-          }
-          if (excess.length > 0) {
-            assigned.push(...excess);
-          }
-        }
-      }
-
-      for (const [stfId, stds] of studentsByStaff.entries()) {
-        if (stds.length > 0) {
-          activeStaffEntries.push([stfId, stds]);
-        }
+      const host =
+        activeStaffEntries[0] ?? (qualifiedStaff.length > 0 ? ([qualifiedStaff[0], []] as [string, string[]]) : null);
+      if (host) {
+        host[1].push(...allocation.unallocated_ids);
+        if (!activeStaffEntries.includes(host)) activeStaffEntries.push(host);
       }
     }
 
@@ -251,6 +224,9 @@ export function runSectionSplitter(): SplitResultSummary {
         is_lab: isLab,
         warning_message: warnMsg,
         student_ids: studentIds,
+        allocation_basis: basisByStaff.get(staffId)
+          ? { ...basisByStaff.get(staffId), final_size: studentIds.length, over_preferred: studentIds.length > (basisByStaff.get(staffId)!.preferred) }
+          : null,
       });
 
       secIdx++;
@@ -271,8 +247,8 @@ export function runSectionSplitter(): SplitResultSummary {
 
     const insertSecStmt = db.prepare(`
       INSERT INTO sections (
-        subject_code, staff_id, section_label, size, required_room_type, hours_per_week, is_lab, warning_message, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        subject_code, staff_id, section_label, size, required_room_type, hours_per_week, is_lab, warning_message, created_at, allocation_basis
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertSecStuStmt = db.prepare(`
@@ -294,7 +270,8 @@ export function runSectionSplitter(): SplitResultSummary {
         plan.hours_per_week,
         plan.is_lab,
         plan.warning_message,
-        now
+        now,
+        plan.allocation_basis ? JSON.stringify(plan.allocation_basis) : null
       );
 
       const sectionId = Number(res.lastInsertRowid);
@@ -317,6 +294,7 @@ export function runSectionSplitter(): SplitResultSummary {
         is_lab: plan.is_lab,
         warning_message: plan.warning_message,
         student_ids: plan.student_ids,
+        allocation_basis: plan.allocation_basis,
       });
     }
 
@@ -365,7 +343,8 @@ export function getSections(): SplitSectionResult[] {
       s.required_room_type,
       s.hours_per_week,
       s.is_lab,
-      s.warning_message
+      s.warning_message,
+      s.allocation_basis
     FROM sections s
     LEFT JOIN subjects sub ON s.subject_code = sub.subject_code
     LEFT JOIN staff stf ON s.staff_id = stf.staff_id
@@ -391,6 +370,7 @@ export function getSections(): SplitSectionResult[] {
       hours_per_week: r.hours_per_week,
       is_lab: r.is_lab,
       warning_message: r.warning_message,
+      allocation_basis: r.allocation_basis ? JSON.parse(r.allocation_basis) : null,
       student_ids: stRows.map((s) => s.student_id),
     };
   });

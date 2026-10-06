@@ -13,6 +13,7 @@ import { ForecastPage } from './pages/ForecastPage.js';
 import { ChangesPage } from './pages/ChangesPage.js';
 import { AssistantPage } from './pages/AssistantPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
+import { AllocationPage } from './pages/AllocationPage.js';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +40,7 @@ export const App: React.FC = () => {
             <Route path="dashboard" element={<DashboardPage />} />
             {/* Phase 3 routes */}
             <Route path="changes" element={<ChangesPage />} />
+            <Route path="allocation" element={<AllocationPage />} />
             <Route path="assistant" element={<AssistantPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

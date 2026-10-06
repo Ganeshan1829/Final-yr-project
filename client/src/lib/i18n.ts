@@ -10,6 +10,7 @@ export interface Translations {
   tabLeave: string;
   tabEvents: string;
   tabIntake: string;
+  tabReallocation: string;
   tabHistory: string;
 
   // Actions
@@ -60,6 +61,7 @@ export const I18N_STRINGS: Record<'en' | 'ta', Translations> = {
     tabLeave: 'Faculty Leave',
     tabEvents: 'Events & Rooms',
     tabIntake: 'Intake Rebalance',
+    tabReallocation: 'Teacher Reallocation',
     tabHistory: 'Change History',
 
     previewImpact: 'Preview Impact',
@@ -105,6 +107,7 @@ export const I18N_STRINGS: Record<'en' | 'ta', Translations> = {
     tabLeave: 'ஆசிரியர் விடுப்பு',
     tabEvents: 'நிகழ்வுகள் & அரங்கங்கள்',
     tabIntake: 'மாணவர் சேர்க்கை மாற்றம்',
+    tabReallocation: 'ஆசிரியர் மறுபகிர்வு',
     tabHistory: 'மாற்றங்களின் வரலாறு',
 
     previewImpact: 'தாக்கத்தை முன்னோட்டமிடு',

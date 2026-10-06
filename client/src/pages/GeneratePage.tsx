@@ -14,6 +14,7 @@ import {
 import { Card, CardContent } from '../components/common/Card.js';
 import { Button } from '../components/common/Button.js';
 import { Badge } from '../components/common/Badge.js';
+import { SizeBar, SizeBarLegend } from '../components/common/SizeBar.js';
 import { Drawer } from '../components/common/Drawer.js';
 import { toast } from 'sonner';
 import {
@@ -34,6 +35,12 @@ import {
   X,
   FileSpreadsheet,
 } from 'lucide-react';
+
+const RULE_LABELS: Record<string, string> = {
+  student_choice: 'Kept students who chose this teacher',
+  demand_fill: 'Filled to the teacher preferred size / ML target, then up to the limit',
+  extra_batch: 'Extra section opened because other teachers were full',
+};
 
 export const GeneratePage: React.FC = () => {
   const navigate = useNavigate();
@@ -593,6 +600,7 @@ export const GeneratePage: React.FC = () => {
               </div>
 
               {/* Sections Table */}
+              <div className="mb-2"><SizeBarLegend /></div>
               <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 border-b border-border text-text-muted font-semibold">
@@ -601,7 +609,7 @@ export const GeneratePage: React.FC = () => {
                       <th className="py-2.5 px-3">Subject</th>
                       <th className="py-2.5 px-3">Faculty</th>
                       <th className="py-2.5 px-3">Room Required</th>
-                      <th className="py-2.5 px-3">Size</th>
+                      <th className="py-2.5 px-3" title="Class size against the teacher's preferred size, hard limit and ML recommendation">Size vs teacher limits</th>
                       <th className="py-2.5 px-3">Hours/Wk</th>
                       <th className="py-2.5 px-3">Type</th>
                       <th className="py-2.5 px-3">Status</th>
@@ -622,7 +630,22 @@ export const GeneratePage: React.FC = () => {
                             {s.required_room_type.replace('_', ' ')}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-semibold">{s.size}</td>
+                        <td className="py-2.5 px-3">
+                          {s.allocation_basis ? (
+                            <div
+                              title={`${RULE_LABELS[s.allocation_basis.rule] || s.allocation_basis.rule}. Demand ${s.allocation_basis.demand_total}, ${s.allocation_basis.chosen} chose this teacher, ${s.allocation_basis.moved_in} moved in, ${s.allocation_basis.moved_out} moved out.`}
+                            >
+                              <SizeBar
+                                size={s.size}
+                                preferred={s.allocation_basis.preferred}
+                                hardCap={s.allocation_basis.hard_cap}
+                                ml={s.allocation_basis.ml_expected}
+                              />
+                            </div>
+                          ) : (
+                            <span className="font-semibold">{s.size}</span>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3">{s.hours_per_week}h</td>
                         <td className="py-2.5 px-3">
                           {s.is_lab === 1 ? (

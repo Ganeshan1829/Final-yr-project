@@ -17,6 +17,7 @@ import { forecastProxyRouter } from './routes/forecastProxy.js';
 import { engineRouter } from './routes/engine.js';
 import { changesRouter } from './routes/changes.js';
 import { chatbotRouter } from './routes/chatbot.js';
+import { allocationRouter } from './routes/allocation.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { exportRouter } from './routes/export.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -87,6 +88,7 @@ app.use('/api/clean', cleanRouter);
 app.use('/api/engine', engineRouter);
 app.use('/api/changes', changesRouter);
 app.use('/api/chat', chatbotRouter);
+app.use('/api/allocation', allocationRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/export', exportRouter);
 

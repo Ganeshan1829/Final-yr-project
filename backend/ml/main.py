@@ -7,6 +7,12 @@ from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel
 import pandas as pd
 
+from backend.ml.class_size import (
+    ensure_synthetic_file,
+    get_class_size_report,
+    predict_class_sizes,
+    train_class_size_models,
+)
 from backend.ml.service import (
     generate_predictions,
     get_accuracy_report,
@@ -196,6 +202,56 @@ def update_subject_map_endpoint(payload: SubjectMapUpdate) -> Dict[str, Any]:
     return update_subject_mapping(payload.ml_subject_code, payload.engine_subject_code)
 
 app.include_router(router)
+
+# 8. Teacher-level class-size recommendation (advisory; pure - never writes to the timetable DB)
+class TeacherFeatures(BaseModel):
+    staff_id: str
+    teacher_preferred: float
+    teacher_max: float
+    prev_class_size: Optional[float] = None
+    subject_experience_years: Optional[float] = None
+    feedback_overcrowd_rate: Optional[float] = None
+    feedback_interaction: Optional[float] = None
+    hist_attendance: Optional[float] = None
+    prev_allocation_share: Optional[float] = None
+
+class ClassSizeRequest(BaseModel):
+    subject_code: str
+    student_demand: float
+    is_lab: int = 0
+    credits: Optional[float] = None
+    semester: Optional[int] = None
+    room_capacity: Optional[float] = None
+    prev_enrollment: Optional[float] = None
+    teachers: List[TeacherFeatures]
+
+class ClassSizePredictBody(BaseModel):
+    requests: List[ClassSizeRequest]
+
+@router.post("/class-size/train")
+def class_size_train_endpoint(regenerate_synthetic: bool = Query(False)) -> Dict[str, Any]:
+    try:
+        if regenerate_synthetic:
+            ensure_synthetic_file(force=True)
+        return train_class_size_models()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/class-size/report")
+def class_size_report_endpoint() -> Dict[str, Any]:
+    return get_class_size_report()
+
+@router.post("/class-size/predict")
+def class_size_predict_endpoint(body: ClassSizePredictBody) -> Dict[str, Any]:
+    try:
+        reqs = [r.model_dump(exclude_none=True) for r in body.requests]
+        for r, raw in zip(reqs, body.requests):
+            r["teachers"] = [t.model_dump(exclude_none=True) for t in raw.teachers]
+        return predict_class_sizes(reqs)
+    except RuntimeError as re:
+        raise HTTPException(status_code=409, detail=str(re))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 def root():

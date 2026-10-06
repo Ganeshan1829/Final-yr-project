@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Export storage directory: server/exports
-export const EXPORTS_DIR = path.resolve(__dirname, '../../../exports');
+export const EXPORTS_DIR = process.env.APP_DATA_DIR ? path.resolve(process.env.APP_DATA_DIR, 'exports') : path.resolve(__dirname, '../../../exports');
 
 /**
  * Ensures the exports directory exists and runs the 7-day retention cleanup.

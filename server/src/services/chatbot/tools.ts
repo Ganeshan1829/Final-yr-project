@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '../../db.js';
 import { previewChange, ImpactSummary } from '../changes/changesService.js';
 import { computeTimetableInsights, InsightsResult } from './insightsService.js';
+import { refreshClassPredictions, suggestStudentDistribution } from '../engine/demandPredictionService.js';
 
 export type UserRole = 'student' | 'staff' | 'hod';
 
@@ -112,6 +113,24 @@ export const InsightsSchema = z.object({
   wasted_seats_min: z.number().optional(),
 });
 
+export const PredictClassDemandSchema = z.object({
+  subject_codes: z.array(z.string()).optional().describe('Subjects to predict; omit for all subjects with qualified teachers'),
+});
+
+export const SuggestStudentDistributionSchema = z.object({
+  subject_code: z.string(),
+  total_students: z.number().int().positive().optional().describe('Override student count; defaults to current demand'),
+  unavailable_staff_ids: z.array(z.string()).optional().describe('Teachers to exclude from the distribution'),
+});
+
+export const SimulateTeacherAllocationSchema = z.object({
+  unavailable_staff_ids: z.array(z.string()).min(1),
+  subject_codes: z.array(z.string()).optional(),
+  effective_date: z.string().optional().describe('YYYY-MM-DD; teachers on approved leave that day are also treated as unavailable'),
+  reason: z.string().optional(),
+  stage: z.boolean().optional().describe('false/omitted = hypothetical what-if; true = stage a draft the HOD must confirm'),
+});
+
 // Tool Definitions Registry (for LLM Function Calling)
 export const TOOL_DEFINITIONS = [
   {
@@ -184,7 +203,25 @@ export const TOOL_DEFINITIONS = [
     description: 'Deterministic analytics on underused rooms, wasted seats, staff workload gaps, and shortfall risks.',
     parameters: InsightsSchema,
   },
+  {
+    name: 'predict_class_demand',
+    description: 'Refresh ML class-size recommendations per teacher/subject (advisory only; hard limits are enforced by the allocation engine).',
+    parameters: PredictClassDemandSchema,
+  },
+  {
+    name: 'suggest_student_distribution',
+    description: 'Show how students of a subject would be split across qualified teachers using preferences, history, ML and hard limits (read-only).',
+    parameters: SuggestStudentDistributionSchema,
+  },
+  {
+    name: 'simulate_teacher_allocation',
+    description: 'Simulate redistributing students of unavailable teachers to other teachers of the same subject. Hypothetical unless stage=true, which creates a draft the HOD must confirm.',
+    parameters: SimulateTeacherAllocationSchema,
+  },
 ];
+
+/** Tools that call the ML service and therefore must be executed with executeToolAsync. */
+export const ASYNC_TOOLS = ['predict_class_demand', 'suggest_student_distribution'];
 
 // Helper: Sanitize database text against prompt injection
 export function sanitizeDataText(text: string | null | undefined): string {
@@ -231,14 +268,11 @@ export function logAudit(
 // Deterministic Tool Implementations
 // -------------------------------------------------------------
 
-export function executeTool(
-  toolName: string,
-  rawArgs: any,
-  userCtx: UserContext
-): ToolExecutionResult {
-  const { userId, role } = userCtx;
+const ALLOCATION_TOOLS = ['predict_class_demand', 'suggest_student_distribution', 'simulate_teacher_allocation'];
 
-  // 1. Role permission checks (Enforced in server layer)
+/** Server-side role enforcement shared by the sync and async executors. Returns a denial result or null. */
+function denyIfForbidden(toolName: string, rawArgs: any, userCtx: UserContext): ToolExecutionResult | null {
+  const { userId, role } = userCtx;
   if (role === 'student') {
     const studentForbidden = [
       'list_leave',
@@ -249,6 +283,7 @@ export function executeTool(
       'preview_what_if',
       'suggest_substitutes',
       'insights',
+      ...ALLOCATION_TOOLS,
     ];
     if (studentForbidden.includes(toolName)) {
       logAudit(userId, role, toolName, rawArgs, 'denied', 'Student role permission denied');
@@ -261,21 +296,64 @@ export function executeTool(
       };
     }
   } else if (role === 'staff') {
-    const staffForbidden = [
-      'preview_add_event',
-      'preview_change_intake',
-    ];
+    const staffForbidden = ['preview_add_event', 'preview_change_intake', ...ALLOCATION_TOOLS];
     if (staffForbidden.includes(toolName)) {
-      logAudit(userId, role, toolName, rawArgs, 'denied', 'Staff role cannot perform institutional event or intake changes');
+      logAudit(userId, role, toolName, rawArgs, 'denied', 'Staff role cannot perform institutional event, intake or allocation changes');
       return {
         success: false,
         tool: toolName,
         args: rawArgs,
         denied: true,
-        message: 'Permission denied: Only the Head of Department (HOD) can schedule institutional events or alter section intake sizes.',
+        message: 'Permission denied: Only the Head of Department (HOD) can schedule institutional events, alter section intake sizes, or plan teacher/student allocation.',
       };
     }
   }
+  return null;
+}
+
+/** Async executor: handles ML-backed tools, delegates everything else to the deterministic sync executor. */
+export async function executeToolAsync(toolName: string, rawArgs: any, userCtx: UserContext): Promise<ToolExecutionResult> {
+  if (!ASYNC_TOOLS.includes(toolName)) return executeTool(toolName, rawArgs, userCtx);
+  const { userId, role } = userCtx;
+  const denied = denyIfForbidden(toolName, rawArgs, userCtx);
+  if (denied) return denied;
+  try {
+    if (toolName === 'predict_class_demand') {
+      const args = PredictClassDemandSchema.parse(rawArgs);
+      const out = await refreshClassPredictions(args.subject_codes);
+      logAudit(userId, role, toolName, args, out.available ? 'success' : 'error', out);
+      return {
+        success: out.available,
+        tool: toolName,
+        args,
+        result: out,
+        message: out.available ? undefined : `ML prediction unavailable: ${out.reason}. Allocation continues using teacher preferences and history.`,
+      };
+    }
+    const args = SuggestStudentDistributionSchema.parse(rawArgs);
+    const out = await suggestStudentDistribution({
+      subject_code: args.subject_code,
+      total_students: args.total_students,
+      excluded_staff: args.unavailable_staff_ids,
+    });
+    logAudit(userId, role, toolName, args, 'success');
+    return { success: true, tool: toolName, args, result: out };
+  } catch (err: any) {
+    logAudit(userId, role, toolName, rawArgs, 'error', err.message);
+    return { success: false, tool: toolName, args: rawArgs, message: `Tool execution failed: ${err.message}` };
+  }
+}
+
+export function executeTool(
+  toolName: string,
+  rawArgs: any,
+  userCtx: UserContext
+): ToolExecutionResult {
+  const { userId, role } = userCtx;
+
+  // 1. Role permission checks (Enforced in server layer)
+  const denied = denyIfForbidden(toolName, rawArgs, userCtx);
+  if (denied) return denied;
 
   try {
     switch (toolName) {
@@ -763,6 +841,27 @@ export function executeTool(
           tool: toolName,
           args,
           result: insightsData,
+        };
+      }
+
+      // ---------------------------------------------------------
+      // 15. simulate_teacher_allocation (what-if unless stage=true; confirm is a separate HOD action)
+      // ---------------------------------------------------------
+      case 'simulate_teacher_allocation': {
+        const args = SimulateTeacherAllocationSchema.parse(rawArgs);
+        const stage = Boolean(args.stage);
+        const { stage: _stage, ...payload } = args;
+        const preview = previewChange('reallocation', payload, userId, !stage);
+        logAudit(userId, role, toolName, args, 'success', { change_id: preview.change_id });
+        return {
+          success: true,
+          tool: toolName,
+          args,
+          preview,
+          isWhatIf: !stage,
+          message: stage
+            ? 'Reallocation preview staged. Review the student moves and click Confirm to apply (nothing has changed yet).'
+            : 'Hypothetical reallocation computed. Nothing was changed.',
         };
       }
 

@@ -8,7 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Ensure the canonical server data directory exists.
-const dataDir = path.resolve(__dirname, '../data');
+// APP_DATA_DIR lets tests (and deployments) keep the database, uploads and exports out of the dev folders.
+const dataDir = process.env.APP_DATA_DIR ? path.resolve(process.env.APP_DATA_DIR, 'data') : path.resolve(__dirname, '../data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }

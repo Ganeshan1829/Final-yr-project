@@ -1,0 +1,72 @@
+{
+  "trained_at": "2026-10-06T13:54:55.163156+00:00",
+  "data_origin": "SYNTHETIC - not real college data",
+  "rows_total": 2062,
+  "rows_train": 1631,
+  "rows_test": 431,
+  "train_years": [
+    "2012-13",
+    "2013-14",
+    "2014-15",
+    "2015-16",
+    "2016-17",
+    "2017-18",
+    "2018-19",
+    "2019-20",
+    "2020-21",
+    "2021-22",
+    "2022-23"
+  ],
+  "test_years": [
+    "2023-24",
+    "2024-25",
+    "2025-26"
+  ],
+  "split": "chronological hold-out (test years never seen in training)",
+  "metrics": {
+    "equal_distribution": {
+      "mae": 8.845,
+      "rmse": 15.1004,
+      "r2": -1.0772
+    },
+    "preferred_proportional": {
+      "mae": 7.3531,
+      "rmse": 14.5313,
+      "r2": -0.9236
+    },
+    "random_forest": {
+      "mae": 1.4221,
+      "rmse": 2.2583,
+      "r2": 0.9535
+    },
+    "xgboost": {
+      "mae": 1.522,
+      "rmse": 2.2651,
+      "r2": 0.9533
+    }
+  },
+  "best_ml_model": "random_forest",
+  "beats_equal_distribution": true,
+  "beats_preferred_proportional": true,
+  "model_active": true,
+  "features": [
+    "student_demand",
+    "n_teachers",
+    "equal_share",
+    "prev_enrollment",
+    "prev_class_size",
+    "teacher_preferred",
+    "teacher_max",
+    "subject_experience_years",
+    "feedback_overcrowd_rate",
+    "feedback_interaction",
+    "hist_attendance",
+    "prev_allocation_share",
+    "is_lab",
+    "credits",
+    "semester",
+    "year_index",
+    "room_capacity"
+  ],
+  "note": "ML output is advisory. The deterministic allocation engine enforces teacher max, room capacity, workload and holidays and makes the final decision."
+}

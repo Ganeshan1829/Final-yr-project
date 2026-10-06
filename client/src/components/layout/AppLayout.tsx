@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   UploadCloud,
   Sliders,
+  Users,
   Calendar,
   CheckCircle2,
   Layers,
@@ -61,6 +62,7 @@ export const AppLayout: React.FC = () => {
       case '/generate': return 'Timetable Engine (Module 3)';
       case '/dashboard': return 'Academic Performance Dashboard & Exports';
       case '/changes': return 'Management Changes & Re-solve (Phase 3)';
+      case '/allocation': return 'Teacher-Aware Allocation';
       case '/assistant': return 'Smart Timetable Assistant (Phase 3)';
       default: return 'Timetable Planning System';
     }
@@ -162,6 +164,12 @@ export const AppLayout: React.FC = () => {
               <div className="flex items-center gap-2.5">
                 <Sliders className="w-4 h-4 shrink-0 text-indigo-300" />
                 <span>Manage Changes</span>
+              </div>
+            </NavLink>
+            <NavLink to="/allocation" className={navLinkClass}>
+              <div className="flex items-center gap-2.5">
+                <Users className="w-4 h-4 shrink-0 text-indigo-300" />
+                <span>Teacher Allocation</span>
               </div>
             </NavLink>
             <NavLink to="/assistant" className={navLinkClass}>

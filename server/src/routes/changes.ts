@@ -24,8 +24,8 @@ changesRouter.post('/preview', (req: Request, res: Response) => {
     if (!type || !payload) {
       return res.status(400).json({ error: 'Missing required fields: type and payload.' });
     }
-    if (!['leave', 'event', 'intake'].includes(type)) {
-      return res.status(400).json({ error: `Invalid change type '${type}'. Must be 'leave', 'event', or 'intake'.` });
+    if (!['leave', 'event', 'intake', 'reallocation'].includes(type)) {
+      return res.status(400).json({ error: `Invalid change type '${type}'. Must be 'leave', 'event', 'intake', or 'reallocation'.` });
     }
 
     const user = (req.headers['x-user-role'] as string) || created_by || 'HOD';

@@ -9,6 +9,7 @@ import {
   Sparkles,
   Info,
   RefreshCw,
+  Shuffle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -26,9 +27,10 @@ import {
   getStoredLanguage,
 } from '../lib/api';
 import { I18N_STRINGS } from '../lib/i18n';
+import { ReallocationPanel } from '../components/changes/ReallocationPanel';
 
 export const ChangesPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'leave' | 'event' | 'intake' | 'history'>('leave');
+  const [activeTab, setActiveTab] = useState<'leave' | 'event' | 'intake' | 'reallocation' | 'history'>('leave');
   const [lang, setLang] = useState<'en' | 'ta'>(getStoredLanguage());
   const role = getStoredUserRole();
   const t = I18N_STRINGS[lang];
@@ -62,6 +64,12 @@ export const ChangesPage: React.FC = () => {
   const [intakeForm, setIntakeForm] = useState({
     section_id: '',
     new_size: 40,
+  });
+
+  const [reallocForm, setReallocForm] = useState<{ unavailable: string[]; subject_code: string; effective_date: string }>({
+    unavailable: [],
+    subject_code: '',
+    effective_date: '',
   });
 
   // Preview & Loading state
@@ -132,6 +140,18 @@ export const ChangesPage: React.FC = () => {
           end_period: Number(eventForm.end_period),
           staff_involved: eventForm.staff_involved ? eventForm.staff_involved.split(';').map((s) => s.trim()) : undefined,
           sections_involved: eventForm.sections_involved ? eventForm.sections_involved.split(',').map((s) => s.trim()) : undefined,
+        };
+      } else if (type === 'reallocation') {
+        if (reallocForm.unavailable.length === 0) {
+          toast.error('Select at least one unavailable teacher.');
+          setLoading(false);
+          return;
+        }
+        payload = {
+          unavailable_staff_ids: reallocForm.unavailable,
+          ...(reallocForm.subject_code ? { subject_codes: [reallocForm.subject_code] } : {}),
+          ...(reallocForm.effective_date ? { effective_date: reallocForm.effective_date } : {}),
+          reason: 'Teacher unavailable - student redistribution',
         };
       } else {
         payload = {
@@ -282,6 +302,7 @@ export const ChangesPage: React.FC = () => {
           { key: 'leave', label: t.tabLeave, icon: Users },
           { key: 'event', label: t.tabEvents, icon: Building },
           { key: 'intake', label: t.tabIntake, icon: RefreshCw },
+          { key: 'reallocation', label: t.tabReallocation, icon: Shuffle },
           { key: 'history', label: t.tabHistory, icon: RotateCcw },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -498,6 +519,79 @@ export const ChangesPage: React.FC = () => {
               </form>
             )}
 
+            {/* Teacher Reallocation Tab */}
+            {activeTab === 'reallocation' && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handlePreview('reallocation');
+                }}
+                className="space-y-4"
+              >
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Select the teacher(s) who are unavailable. Their students are redistributed to other teachers of the same subject using
+                  preferred class size, ML recommendation and hard limits. Nothing changes until you confirm.
+                </p>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">Unavailable teachers</label>
+                  <div className="max-h-48 overflow-auto border border-gray-300 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                    {staffList.map((s) => {
+                      const checked = reallocForm.unavailable.includes(s.staff_id);
+                      return (
+                        <label key={s.staff_id} className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setReallocForm((f) => ({
+                                ...f,
+                                unavailable: checked ? f.unavailable.filter((x) => x !== s.staff_id) : [...f.unavailable, s.staff_id],
+                              }))
+                            }
+                          />
+                          <span className="text-gray-900 dark:text-white">{s.staff_name}</span>
+                          <span className="text-xs text-gray-500">{s.staff_id}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">Limit to subject (optional)</label>
+                  <select
+                    value={reallocForm.subject_code}
+                    onChange={(e) => setReallocForm({ ...reallocForm, subject_code: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white"
+                  >
+                    <option value="">All subjects they teach</option>
+                    {Array.from(new Set(sectionList.map((sec) => sec.subject_code))).sort().map((code) => (
+                      <option key={code as string} value={code as string}>
+                        {code as string}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">Effective date (optional)</label>
+                  <input
+                    type="date"
+                    value={reallocForm.effective_date}
+                    onChange={(e) => setReallocForm({ ...reallocForm, effective_date: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white"
+                  />
+                  <span className="text-xs text-gray-500 mt-1 block">Teachers on approved leave on this date are also treated as unavailable.</span>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {loading ? t.submitting : t.previewImpact}
+                </button>
+              </form>
+            )}
+
             {/* Intake Tab */}
             {activeTab === 'intake' && (
               <form
@@ -576,7 +670,21 @@ export const ChangesPage: React.FC = () => {
                   </span>
                 </div>
 
+                {preview.impact_summary.reallocation && (
+                  <ReallocationPanel
+                    plan={preview.impact_summary.reallocation}
+                    isWhatIf={preview.is_what_if}
+                    onUseSubstitute={() => {
+                      const first = reallocForm.unavailable[0];
+                      if (first) setLeaveForm((f) => ({ ...f, staff_id: first }));
+                      setPreview(null);
+                      setActiveTab('leave');
+                    }}
+                  />
+                )}
+
                 {/* Summary Metrics Cards */}
+                {!preview.impact_summary.reallocation && (<>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl text-center">
                     <span className="text-xs text-gray-500">{t.affectedSessions}</span>
@@ -666,6 +774,8 @@ export const ChangesPage: React.FC = () => {
                   </div>
                 </div>
 
+                </>)}
+
                 {/* Action Buttons: Confirm and Discard */}
                 <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-end gap-3">
                   <button
@@ -677,8 +787,9 @@ export const ChangesPage: React.FC = () => {
                   </button>
                   <button
                     onClick={handleConfirm}
-                    disabled={actionLoading}
-                    className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
+                    disabled={actionLoading || preview.impact_summary.reallocation?.moves.length === 0}
+                    title={preview.impact_summary.reallocation?.moves.length === 0 ? 'No student can be moved within the limits, so there is nothing to confirm.' : undefined}
+                    className="px-5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     {actionLoading ? t.submitting : t.confirmChange}
@@ -748,7 +859,9 @@ export const ChangesPage: React.FC = () => {
                       </p>
                       {item.impact_summary && (
                         <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">
-                          {item.impact_summary.sessions_affected_count} sessions affected • Shortfall: {item.impact_summary.shortfall_before}h → {item.impact_summary.shortfall_after}h
+                          {item.impact_summary.reallocation
+                            ? `${item.impact_summary.reallocation.moves.length} students moved • ${item.impact_summary.reallocation.unresolved.length} could not be placed`
+                            : `${item.impact_summary.sessions_affected_count} sessions affected • Shortfall: ${item.impact_summary.shortfall_before}h → ${item.impact_summary.shortfall_after}h`}
                         </p>
                       )}
                     </div>

@@ -1,8 +1,16 @@
 import { db } from '../../db.js';
 import { getStoredRules } from '../rulesService.js';
 import { validateDatabaseCalendar } from '../engine/engineValidator.js';
+import {
+  planReallocation,
+  reallocationDiff,
+  applyReallocation,
+  revertReallocation,
+  ReallocationPlan,
+  StudentMove,
+} from './reallocationService.js';
 
-export type ChangeType = 'leave' | 'event' | 'intake';
+export type ChangeType = 'leave' | 'event' | 'intake' | 'reallocation';
 export type ChangeStatus = 'draft' | 'previewed' | 'applied' | 'reverted' | 'discarded';
 
 export interface ProposedFix {
@@ -36,6 +44,8 @@ export interface ImpactSummary {
   shortfall_after: number;
   by_subject_shortfall: Array<{ subject_code: string; before: number; after: number }>;
   new_clashes: number;
+  /** Present for type 'reallocation': per-subject student redistribution plan (applied only on confirm). */
+  reallocation?: ReallocationPlan;
   diff: Array<{
     session_id?: number;
     description: string;
@@ -71,8 +81,44 @@ export function getTimetableFingerprint(): string {
   return `${row?.c_count || 0}_${row?.t_count || 0}_${row?.max_c || 0}_${row?.cal_at || ''}`;
 }
 
+/** Reallocation previews reuse the same staging/stale-token/confirm flow as the other change types. */
+function previewReallocationChange(payload: any, createdBy: string, isWhatIf: boolean) {
+  if (!payload || !Array.isArray(payload.unavailable_staff_ids) || payload.unavailable_staff_ids.length === 0) {
+    throw new Error('Reallocation requires payload.unavailable_staff_ids (array of staff IDs).');
+  }
+  const plan = planReallocation(payload);
+  const shortfall = (db.prepare(`SELECT COALESCE(SUM(shortfall_hours), 0) AS s FROM hours_summary`).get() as any)?.s || 0;
+  const impactSummary: ImpactSummary = {
+    sessions_affected_count: plan.moves.length,
+    proposed_fixes: [],
+    unresolved_items: plan.unresolved.map((u) => ({ session_id: 0, reason: `${u.subject_code} student ${u.student_id}: ${u.reason}` })),
+    shortfall_before: shortfall,
+    shortfall_after: shortfall,
+    by_subject_shortfall: [],
+    new_clashes: 0,
+    reallocation: plan,
+    diff: reallocationDiff(plan),
+  };
+  const token = getTimetableFingerprint();
+  if (isWhatIf) {
+    return { change_id: null, type: 'reallocation' as ChangeType, payload, status: 'previewed' as ChangeStatus, is_what_if: true, stale_token: token, impact_summary: impactSummary };
+  }
+  const res = db
+    .prepare(`INSERT INTO changes (type, payload, status, created_by, created_at, impact_summary, stale_token) VALUES ('reallocation', ?, 'previewed', ?, ?, ?, ?)`)
+    .run(JSON.stringify(payload), createdBy, new Date().toISOString(), JSON.stringify(impactSummary), token);
+  return {
+    change_id: Number(res.lastInsertRowid),
+    type: 'reallocation' as ChangeType,
+    payload,
+    status: 'previewed' as ChangeStatus,
+    is_what_if: false,
+    stale_token: token,
+    impact_summary: impactSummary,
+  };
+}
+
 /**
- * Previews a management change (leave, event, intake) without committing to the live schedule.
+ * Previews a management change (leave, event, intake, reallocation) without committing to the live schedule.
  * If isWhatIf is false, persists a record in `changes` with status 'previewed'.
  */
 export function previewChange(
@@ -89,6 +135,10 @@ export function previewChange(
   stale_token: string;
   impact_summary: ImpactSummary;
 } {
+  if (type === 'reallocation') {
+    return previewReallocationChange(payload, createdBy, isWhatIf);
+  }
+
   const { rules } = getStoredRules();
   const workingDays = rules?.working_days || ['MON', 'TUE', 'WED', 'THU', 'FRI'];
   const periodsPerDay = rules?.periods_per_day || 7;
@@ -863,12 +913,16 @@ export function confirmChange(
       beforeTimetableSlots = db.prepare(`SELECT * FROM timetable_slots WHERE section_id = ?`).all(payload.section_id);
     }
 
+    const reallocationMoves: StudentMove[] =
+      change.type === 'reallocation' ? ((impactSummary.reallocation?.moves as StudentMove[]) || []) : [];
+
     const beforeState = {
       type: change.type,
       payload,
       sessions: beforeSessions,
       section: beforeSection,
       timetable_slots: beforeTimetableSlots,
+      reallocation_moves: reallocationMoves,
     };
 
     // 2. Apply proposed fixes
@@ -930,6 +984,11 @@ export function confirmChange(
       if (roomMove && roomMove.new_room_id) {
         db.prepare(`UPDATE timetable_slots SET room_id = ? WHERE section_id = ?`).run(roomMove.new_room_id, section_id);
       }
+    }
+
+    // 3b. Apply student reallocation (re-validates membership and capacity; throws -> rollback)
+    if (change.type === 'reallocation') {
+      applyReallocation(reallocationMoves);
     }
 
     // 4. Record leave in leave table if type === 'leave'
@@ -1095,6 +1154,11 @@ export function revertChange(
         beforeState.section.size,
         beforeState.section.section_id
       );
+    }
+
+    // 2b. Undo student reallocation moves
+    if (Array.isArray(beforeState.reallocation_moves) && beforeState.reallocation_moves.length > 0) {
+      revertReallocation(beforeState.reallocation_moves);
     }
 
     // 3. Restore timetable slots if intake

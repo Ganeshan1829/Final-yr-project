@@ -1,4 +1,4 @@
-import { TOOL_DEFINITIONS, executeTool, sanitizeDataText, UserContext, ToolExecutionResult } from './tools.js';
+import { TOOL_DEFINITIONS, executeToolAsync, sanitizeDataText, UserContext, ToolExecutionResult } from './tools.js';
 
 export interface ChatMessage {
   id?: number;
@@ -46,6 +46,35 @@ function runMockLLM(
   userCtx: UserContext
 ): { toolName?: string; toolArgs?: any; reply?: string } {
   const lower = userMessage.toLowerCase();
+
+  // 0. Teacher-aware allocation intents (checked first: "leave"/"students" keywords below would otherwise match)
+  const staffIds = (userMessage.match(/\b(STF\d+)\b/gi) || []).map((x) => x.toUpperCase());
+  const subjectMatch = (userMessage.match(/\b([A-Z]{2,5}-?\d{2,4}[A-Z]?)\b/g) || []).find((c) => !/^STF/i.test(c));
+  const mentionsRedistribution =
+    lower.includes('redistribut') || lower.includes('reallocat') || lower.includes('reassign') || lower.includes('மறுபகிர்வு');
+  if (mentionsRedistribution && staffIds.length > 0) {
+    const dates = userMessage.match(/\b(202[5-9]-\d{2}-\d{2})\b/g);
+    const stage = /\b(stage|propose|prepare|draft|apply)\b/.test(lower);
+    return {
+      toolName: 'simulate_teacher_allocation',
+      toolArgs: {
+        unavailable_staff_ids: staffIds,
+        ...(subjectMatch ? { subject_codes: [subjectMatch.toUpperCase()] } : {}),
+        ...(dates ? { effective_date: dates[0] } : {}),
+        reason: 'Chatbot reallocation request',
+        stage,
+      },
+    };
+  }
+  if (subjectMatch && (lower.includes('distribut') || lower.includes('split') || lower.includes('how many students') || lower.includes('பகிர்'))) {
+    return {
+      toolName: 'suggest_student_distribution',
+      toolArgs: { subject_code: subjectMatch.toUpperCase(), ...(staffIds.length ? { unavailable_staff_ids: staffIds } : {}) },
+    };
+  }
+  if ((lower.includes('predict') || lower.includes('forecast')) && (lower.includes('class size') || lower.includes('class demand') || lower.includes('student demand'))) {
+    return { toolName: 'predict_class_demand', toolArgs: subjectMatch ? { subject_codes: [subjectMatch.toUpperCase()] } : {} };
+  }
 
   // 1. Find free rooms: "Which rooms are free on Tuesday period 3?" / "Free rooms now" / "அறை" (room)
   if (
@@ -274,6 +303,10 @@ function formatToolResponseText(
         return `நிகழ்வுகள் பட்டியல்: ${result.events.map((e: any) => `${e.date} (பீரியட் ${e.start_period}-${e.end_period}): ${e.name} [அறை: ${e.venue_room_id}]`).join('; ') || 'நிகழ்வுகள் எதுவும் இல்லை'}.`;
       case 'export_request':
         return `கோப்பு பதிவிறக்கம் தயாராக உள்ளது: ${result.download_url}`;
+      case 'predict_class_demand':
+        return `வகுப்பு அளவு பரிந்துரைகள் புதுப்பிக்கப்பட்டன (${result.stored} கணிப்புகள்). இவை ஆலோசனை மட்டுமே; இறுதி முடிவை ஒதுக்கீட்டு இயந்திரம் எடுக்கும்.`;
+      case 'suggest_student_distribution':
+        return `${result.subject_code} பாடத்திற்கான பரிந்துரைக்கப்பட்ட மாணவர் பகிர்வு (${result.total_students} மாணவர்கள்): ${result.teachers.map((t: any) => `${t.staff_name || t.staff_id} -> ${t.students}`).join('; ')}. எதுவும் மாற்றப்படவில்லை.`;
       case 'insights':
         return `கால அட்டவணை பகுப்பாய்வு: குறைந்த பயன்பாட்டு அறைகள்: ${result.underused_rooms.length}, வீணாகும் இருக்கைகள் உள்ள வகுப்புகள்: ${result.wasted_seat_allocations.length}, பற்றாக்குறை அபாயம் உள்ள பாடங்கள்: ${result.shortfall_risks.length}.`;
       default:
@@ -295,6 +328,10 @@ function formatToolResponseText(
       return `Scheduled events (${result.count}): ${result.events.map((e: any) => `${e.date} (Periods ${e.start_period}-${e.end_period}) - ${e.name} in room ${e.venue_room_id}`).join(' | ') || 'No events found'}.`;
     case 'export_request':
       return `Your export is ready. You can download it directly here: [${result.kind} CSV](${result.download_url})`;
+    case 'predict_class_demand':
+      return `ML class-size recommendations refreshed (batch ${result.batch_id}, model ${result.model}): ${result.stored} teacher/subject predictions stored. These are advisory targets only; teacher maximums and room capacity are still enforced by the allocation engine.`;
+    case 'suggest_student_distribution':
+      return `Suggested distribution for ${result.subject_code} (${result.total_students} students, room capacity ${result.room_capacity}): ${result.teachers.map((t: any) => `${t.staff_name || t.staff_id} -> ${t.students} (preferred ${t.preferred}, max ${t.max}${t.ml_expected != null ? `, ML ${Math.round(t.ml_expected)}` : ''})`).join('; ')}.${result.unallocated > 0 ? ` ${result.unallocated} student(s) could not be placed within limits.` : ''}${result.ml_note ? ` Note: ${result.ml_note}` : ''} Read-only; nothing was changed.`;
     case 'insights':
       return `Timetable Insights Summary: Found ${result.underused_rooms.length} underutilized rooms (<40%), ${result.wasted_seat_allocations.length} section-room allocations with large wasted seat margins, and ${result.shortfall_risks.length} subjects at risk of shortfall.`;
     default:
@@ -363,7 +400,7 @@ export async function processChatMessage(
   }
 
   // 2. Validate and execute deterministic tool
-  const toolResult: ToolExecutionResult = executeTool(toolCallName, toolCallArgs, userCtx);
+  const toolResult: ToolExecutionResult = await executeToolAsync(toolCallName, toolCallArgs, userCtx);
 
   // Handle permission denial
   if (toolResult.denied) {
@@ -395,7 +432,14 @@ export async function processChatMessage(
     const isWhatIf = Boolean(toolResult.isWhatIf);
 
     let replyText = '';
-    if (isTamil) {
+    const realloc = preview.impact_summary?.reallocation;
+    if (realloc) {
+      const moved = realloc.moves.length;
+      const stuck = realloc.unresolved.length;
+      replyText = isTamil
+        ? `${isWhatIf ? 'மாதிரி' : 'முன்னோட்டம்'}: ${moved} மாணவர்கள் மாற்றப்படுவார்கள்; ${stuck} மாணவர்களுக்கு இடம் கிடைக்கவில்லை. ${isWhatIf ? 'எதுவும் மாற்றப்படவில்லை.' : 'உறுதி செய்ய "Confirm" அழுத்தவும்.'}`
+        : `${isWhatIf ? 'What-if reallocation' : 'Reallocation preview'}: ${moved} student(s) would move to other teachers' sections; ${stuck} could not be placed within teacher/room limits.${isWhatIf ? ' Nothing was changed.' : ' Review the moves and click Confirm to apply; nothing changes until the HOD confirms.'}`;
+    } else if (isTamil) {
       replyText = isWhatIf
         ? `மாதிரி (What-if) பகுப்பாய்வு முடிந்தது. பாதிக்கப்பட்ட வகுப்புகள்: ${preview.impact_summary.sessions_affected_count}. இந்த மாதிரி மட்டுமே; கால அட்டவணையில் சேர்க்கப்படாது.`
         : `மாற்றத்தின் மாதிரி முன்னோட்டம் (Preview) உருவாக்கப்பட்டது. பாதிக்கப்பட்ட வகுப்புகள்: ${preview.impact_summary.sessions_affected_count}. இதை கால அட்டவணையில் உறுதி செய்ய கீழே உள்ள "Confirm" பொத்தானை அழுத்தவும்.`;
