@@ -1,0 +1,12 @@
+{
+  "time_limit_seconds": 60,
+  "num_workers": 1,
+  "random_seed": 42,
+  "weights": {
+    "wasted_seats": 1,
+    "staff_gaps": 5,
+    "staff_consecutive_excess": 10,
+    "subject_daily_repeat": 8,
+    "late_period_load": 2
+  }
+}

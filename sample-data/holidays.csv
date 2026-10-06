@@ -1,0 +1,12 @@
+holiday_id,name,date_from,date_to,type,applies_to
+HOL-01,Muharram,2026-07-17,2026-07-17,public_holiday,ALL
+HOL-02,Independence Day,2026-08-15,2026-08-15,public_holiday,ALL
+HOL-03,Milad un-Nabi,2026-08-26,2026-08-26,public_holiday,ALL
+HOL-04,Mid-Semester Examination Blackout,2026-09-07,2026-09-12,internal_exam,ALL
+HOL-05,Mahatma Gandhi Birthday,2026-10-02,2026-10-02,public_holiday,ALL
+HOL-06,Dussehra Holidays,2026-10-19,2026-10-21,institution_holiday,ALL
+HOL-07,Diwali Festival Break,2026-11-08,2026-11-10,public_holiday,ALL
+HOL-08,Guru Nanak Jayanti,2026-11-24,2026-11-24,public_holiday,ALL
+HOL-09,Faculty Development Day,2026-07-31,2026-07-31,institution_holiday,FACULTY_ONLY
+HOL-10,Sports & Cultural Fest Day,2026-09-25,2026-09-25,institution_holiday,ALL
+HOL-11,University Annual Day,2026-10-30,2026-10-30,institution_holiday,ALL

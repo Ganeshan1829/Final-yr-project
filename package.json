@@ -1,0 +1,28 @@
+{
+  "name": "smart-timetable-system",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Smart Timetable and Resource Planning System - Module 1: Inputs and Upload",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan.bold,magenta.bold\" \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "build": "npm run build --workspace=server && npm run build --workspace=client",
+    "test": "vitest run",
+    "test:python": "python -m pytest backend/ml/tests",
+    "dev:ml": "python -m uvicorn backend.ml.main:app --port 8000 --reload",
+    "lint": "npm run lint --workspace=server && npm run lint --workspace=client",
+    "seed:chatbot-inputs": "tsx server/src/scripts/seedChatbotInputs.ts"
+  },
+  "devDependencies": {
+    "@types/supertest": "^7.2.1",
+    "concurrently": "^9.1.2",
+    "supertest": "^7.3.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}

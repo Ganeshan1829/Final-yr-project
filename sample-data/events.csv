@@ -1,0 +1,5 @@
+event_id,event_name,event_type,date,start_period,end_period,venue_room_id,staff_involved,student_scope,expected_attendance
+EVT-01,AI Technical Symposium Inauguration,Symposium,2026-08-21,1,3,AUD-1,STF001;STF008,ALL,350
+EVT-02,Guest Lecture on Cloud Architectures,Guest Lecture,2026-09-18,5,6,SEM-1,STF003;STF005,PARTIAL,110
+EVT-03,Coding Marathon Hackathon,Hackathon,2026-10-16,3,7,LAB-1,STF004;STF007,PARTIAL,40
+EVT-04,Industry Advisory Board Meeting,Meeting,2026-11-13,6,7,SEM-2,STF001;STF002;STF009,NONE,25

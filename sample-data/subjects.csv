@@ -1,0 +1,9 @@
+subject_code,subject_name,subject_type,credits,hours_per_week,total_hours,lab_block_periods,required_room_type,department,semester
+CS301,Data Structures and Algorithms,theory,4,4,60,0,classroom,Computer Science & Engineering,5
+CS302,Database Management Systems,theory,3,3,45,0,classroom,Computer Science & Engineering,5
+CS303,Operating Systems,theory,3,3,45,0,classroom,Computer Science & Engineering,5
+CS304,Computer Networks,theory,3,3,45,0,classroom,Computer Science & Engineering,5
+CS305,Artificial Intelligence,theory,3,3,45,0,classroom,Computer Science & Engineering,5
+CS306,Web Development Technologies,theory,3,3,45,0,classroom,Computer Science & Engineering,5
+CS311,Data Structures Laboratory,lab,2,3,45,3,computer_lab,Computer Science & Engineering,5
+CS312,Database Systems Laboratory,lab,2,3,45,3,computer_lab,Computer Science & Engineering,5

@@ -1,0 +1,18 @@
+room_id,room_name,building,floor,capacity,room_type,has_projector,is_ac,status
+LH-101,Lecture Hall 101,Turing Block,1,70,classroom,true,true,active
+LH-102,Lecture Hall 102,Turing Block,1,70,classroom,true,true,active
+LH-103,Lecture Hall 103,Turing Block,1,65,classroom,true,false,active
+LH-201,Lecture Hall 201,Turing Block,2,70,classroom,true,true,active
+LH-202,Lecture Hall 202,Turing Block,2,65,classroom,true,true,active
+LH-203,Lecture Hall 203,Turing Block,2,60,classroom,false,false,active
+LH-301,Lecture Hall 301,Babbage Block,3,65,classroom,true,true,active
+LH-302,Lecture Hall 302,Babbage Block,3,65,classroom,true,false,active
+LH-303,Lecture Hall 303,Babbage Block,3,55,classroom,false,false,active
+LAB-1,Computing Lab 1 (AI & ML),Ada Block,1,45,computer_lab,true,true,active
+LAB-2,Computing Lab 2 (Systems),Ada Block,1,45,computer_lab,true,true,active
+LAB-3,Computing Lab 3 (Web Tech),Ada Block,2,40,computer_lab,true,true,active
+LAB-4,Computing Lab 4 (Networks),Ada Block,2,40,computer_lab,true,false,active
+SEM-1,Seminar Hall Alpha,Main Block,1,120,seminar_hall,true,true,active
+SEM-2,Seminar Hall Beta,Main Block,2,100,seminar_hall,true,true,active
+AUD-1,Main University Auditorium,Central Complex,1,400,auditorium,true,true,active
+LH-104,Lecture Hall 104,Turing Block,1,60,classroom,false,false,maintenance

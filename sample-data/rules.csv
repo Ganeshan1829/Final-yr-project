@@ -1,0 +1,23 @@
+key,value,description
+semester_name,Fall 2026,Academic semester label
+academic_year,2026-2027,Academic year
+department,Computer Science & Engineering,Department name
+semester_start,2026-07-06,Semester starting date (YYYY-MM-DD)
+semester_end,2026-11-27,Semester ending date (YYYY-MM-DD)
+working_days,MON;TUE;WED;THU;FRI,Semicolon-separated list of working days
+saturday_makeup_allowed,false,Whether make-up classes can be scheduled on Saturdays
+periods_per_day,7,Total instructional periods per day
+period_1,08:30-09:20,Timing for period slot 1
+period_2,09:25-10:15,Timing for period slot 2
+period_3,10:30-11:20,Timing for period slot 3
+period_4,11:25-12:15,Timing for period slot 4
+period_5,13:15-14:05,Timing for period slot 5
+period_6,14:10-15:00,Timing for period slot 6
+period_7,15:05-15:55,Timing for period slot 7
+teaching_weeks_planned,16,Number of active teaching weeks planned
+default_section_size,60,Standard student cohort size per section
+min_section_size,30,Minimum allowed cohort size per section
+max_section_size,70,Maximum cap on students per section
+max_consecutive_theory_periods,2,Max back-to-back theory periods allowed
+max_staff_periods_per_day,4,Maximum teaching load per faculty member per day
+timezone,Asia/Kolkata,Institution local timezone

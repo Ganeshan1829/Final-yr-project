@@ -1,0 +1,5 @@
+leave_id,staff_id,date_from,date_to,leave_type,reason,status
+LEV-01,STF002,2026-08-10,2026-08-11,casual,Personal medical appointment,approved
+LEV-02,STF003,2026-09-14,2026-09-16,conference,Presenting research paper at IEEE ICDE Conference,approved
+LEV-03,STF005,2026-10-05,2026-10-06,on_duty,University zonal inspection committee duty,approved
+LEV-04,STF008,2026-11-02,2026-11-04,earned,Family event,approved

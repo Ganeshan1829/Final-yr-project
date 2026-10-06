@@ -1,0 +1,2 @@
+subject_code,subject_name,subject_type,hours_per_week,total_hours,lab_block_periods,required_room_type,department,semester
+CS101,Intro,core,3,3,0,classroom,CS,1

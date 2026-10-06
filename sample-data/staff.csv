@@ -1,0 +1,15 @@
+staff_id,staff_name,designation,department,email,subjects_can_teach,max_hours_per_week,hours_committed_elsewhere
+STF001,Dr. Rajesh Sharma,Professor & HOD,Computer Science & Engineering,rajesh.sharma@univ.edu,CS301;CS305,16,2
+STF002,Dr. Priya Sundaram,Associate Professor,Computer Science & Engineering,priya.s@univ.edu,CS302;CS312,18,0
+STF003,Prof. Amitav Roy,Assistant Professor,Computer Science & Engineering,amitav.roy@univ.edu,CS303;CS304,20,4
+STF004,Dr. Kavitha Raman,Associate Professor,Computer Science & Engineering,kavitha.r@univ.edu,CS301;CS311,18,0
+STF005,Prof. Suresh Kumar,Assistant Professor,Computer Science & Engineering,suresh.k@univ.edu,CS304;CS303,20,2
+STF006,Dr. Sunita Patel,Associate Professor,Computer Science & Engineering,sunita.patel@univ.edu,CS302;CS305,18,0
+STF007,Prof. Vikram Menon,Assistant Professor,Computer Science & Engineering,vikram.m@univ.edu,CS306;CS311,20,0
+STF008,Prof. Deepa Nair,Assistant Professor,Computer Science & Engineering,deepa.nair@univ.edu,CS305;CS301,20,2
+STF009,Dr. Manoj Joshi,Professor,Computer Science & Engineering,manoj.joshi@univ.edu,CS303;CS304,16,4
+STF010,Prof. Anita Desai,Assistant Professor,Computer Science & Engineering,anita.desai@univ.edu,CS306;CS312,20,0
+STF011,Prof. Karthik Venkatesh,Assistant Professor,Computer Science & Engineering,karthik.v@univ.edu,CS302;CS306,20,0
+STF012,Dr. Meenakshi Iyer,Associate Professor,Computer Science & Engineering,meenakshi.i@univ.edu,CS301;CS305,18,2
+STF013,Prof. Rohan Verma,Assistant Professor,Computer Science & Engineering,rohan.v@univ.edu,CS304;CS311,20,0
+STF014,Prof. Swati Mukherjee,Assistant Professor,Computer Science & Engineering,swati.m@univ.edu,CS303;CS312,20,0
