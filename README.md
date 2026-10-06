@@ -326,3 +326,5 @@ Every reported issue adheres to the following specification:
 - [x] **Acceptance Criterion 6 (Stale Invalidation):** Re-uploading any dataset marks the last run as stale (`stale = 1`), displays the stale notice, and disables "Proceed to Generate".
 - [x] **Seamless Setup & Tests:** `npm test` passes all 49 tests, and both client and server build cleanly.
 
+#   F i n a l - y r - p r o j e c t  
+ 
