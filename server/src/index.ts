@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { pinoHttp } from 'pino-http';
 import pino from 'pino';
+import pinoPretty from 'pino-pretty';
 import { schemasRouter } from './routes/schemas.js';
 import { datasetsRouter } from './routes/datasets.js';
 import { rulesRouter } from './routes/rules.js';
@@ -23,16 +24,12 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { exportRouter } from './routes/export.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport:
-    process.env.NODE_ENV !== 'production'
-      ? {
-          target: 'pino-pretty',
-          options: { colorize: true },
-        }
-      : undefined,
-});
+// pino-pretty runs in-process (not via `transport`, which spawns a worker thread): the worker's piped stdout
+// deadlocks the server at startup on Windows when launched under `concurrently` (npm run dev).
+const logger =
+  process.env.NODE_ENV !== 'production'
+    ? pino({ level: process.env.LOG_LEVEL || 'info' }, pinoPretty({ colorize: true, sync: true }))
+    : pino({ level: process.env.LOG_LEVEL || 'info' });
 
 export const app = express();
 const PORT = process.env.PORT || 4000;
@@ -112,7 +109,24 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  // A stray rejection or exception (e.g. a failed solver/PDF child process) must not take the API down:
+  // Node 15+ exits on unhandled rejections, which makes every client request fail with ECONNREFUSED.
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ err: reason }, 'Unhandled promise rejection (server kept running)');
+  });
+  process.on('uncaughtException', (err) => {
+    logger.error({ err }, 'Uncaught exception (server kept running)');
+  });
+
+  const server = app.listen(PORT, () => {
     logger.info(`Server running on http://localhost:${PORT}`);
+  });
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.fatal(`Port ${PORT} is already in use. Stop the other process (netstat -ano | findstr :${PORT}) and retry.`);
+    } else {
+      logger.fatal({ err }, 'Server failed to start');
+    }
+    process.exit(1);
   });
 }
