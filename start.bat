@@ -81,9 +81,9 @@ echo %YELLOW%[CHECK]%RESET% Checking Python packages ^(OR-Tools solver^)...
 !PYBIN! -c "import ortools, pandas" >nul 2>&1
 if !errorlevel! neq 0 (
   echo %YELLOW%[INSTALL]%RESET% Installing solver packages...
-  !PYBIN! -m pip install -r server\engineequirements.txt
+  !PYBIN! -m pip install -r server\engine\requirements.txt
   if !errorlevel! neq 0 (
-    echo %RED%[ERROR]%RESET% pip install failed for server\engineequirements.txt
+    echo %RED%[ERROR]%RESET% pip install failed for server\engine\requirements.txt
     pause & exit /b 1
   )
 )
