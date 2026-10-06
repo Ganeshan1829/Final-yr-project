@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDateTable, buildStaffHint, findStaffByName, normalizeStaffArgs } from '../server/src/services/chatbot/queryContext';
+import { buildDateTable, buildStaffHint, dropUnknownSections, findStaffByName, normalizeStaffArgs } from '../server/src/services/chatbot/queryContext';
 
 const STAFF = [
   { staff_id: 'STF001', staff_name: 'Dr. Rajesh Sharma' },
@@ -66,5 +66,16 @@ describe('normalizeStaffArgs', () => {
   it('leaves ambiguous or unknown names untouched', () => {
     expect(normalizeStaffArgs({ staff_id: 'Kumar' }, STAFF)).toEqual({ staff_id: 'Kumar' });
     expect(normalizeStaffArgs({ staff_id: 'Nobody' }, STAFF)).toEqual({ staff_id: 'Nobody' });
+  });
+});
+
+describe('dropUnknownSections', () => {
+  const labels = ['CS301-S1', 'CS301-S2'];
+  it('drops an invented section but keeps the subject filter', () => {
+    expect(dropUnknownSections({ subject_code: 'CS301', section_id: 'CS301-A' }, labels)).toEqual({ subject_code: 'CS301' });
+  });
+  it('keeps a real section (case-insensitive) or numeric id', () => {
+    expect(dropUnknownSections({ section_id: 'cs301-s1' }, labels)).toEqual({ section_id: 'cs301-s1' });
+    expect(dropUnknownSections({ section_id: '6307' }, labels)).toEqual({ section_id: '6307' });
   });
 });

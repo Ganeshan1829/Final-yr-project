@@ -1,7 +1,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { db } from '../../db.js';
 import { TOOL_DEFINITIONS, UserContext, sanitizeDataText } from './tools.js';
-import { buildDateTable, buildStaffHint, normalizeStaffArgs, StaffRow } from './queryContext.js';
+import { buildDateTable, buildStaffHint, dropUnknownSections, normalizeStaffArgs, StaffRow } from './queryContext.js';
 import type { ChatMessage } from './llmClient.js';
 
 /**
@@ -183,6 +183,14 @@ export async function liveSelectTool(
     throw new Error('Model returned malformed tool arguments');
   }
   args = normalizeStaffArgs(args, loadStaff());
+  if (call.function.name === 'get_hours_left') {
+    try {
+      const labels = (db.prepare('SELECT section_label FROM sections').all() as any[]).map((r) => String(r.section_label));
+      args = dropUnknownSections(args, labels);
+    } catch {
+      /* keep args as-is */
+    }
+  }
   return { toolCall: { id: call.id, name: call.function.name, args }, assistantMessage, messages };
 }
 

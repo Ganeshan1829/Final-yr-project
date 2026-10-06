@@ -114,3 +114,13 @@ export function normalizeStaffArgs<T>(args: T, staff: StaffRow[]): T {
   };
   return walk(args);
 }
+
+/** Drop section filters the model invented (e.g. "CS301-A" when sections are CS301-S1..S4) so they cannot hide real rows. */
+export function dropUnknownSections<T>(args: T, sectionLabels: string[]): T {
+  if (!args || typeof args !== 'object' || sectionLabels.length === 0) return args;
+  const known = new Set(sectionLabels.map((l) => l.toUpperCase()));
+  const out: any = { ...(args as any) };
+  const isKnown = (v: unknown) => typeof v === 'string' && (known.has(v.toUpperCase()) || /^\d+$/.test(v));
+  if ('section_id' in out && out.section_id !== undefined && !isKnown(out.section_id)) delete out.section_id;
+  return out;
+}
