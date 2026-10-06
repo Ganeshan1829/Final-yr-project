@@ -451,8 +451,9 @@ export function executeTool(
         const params: any[] = [];
 
         if (args.scope === 'section' && args.value) {
-          query += ' AND cs.section_id = ?';
-          params.push(args.value);
+          // Accept either the section label (CS301-S1) or its numeric id
+          query += ' AND cs.section_id IN (SELECT section_id FROM sections WHERE section_label = ? COLLATE NOCASE OR CAST(section_id AS TEXT) = ?)';
+          params.push(args.value, args.value);
         } else if (args.scope === 'staff' && args.value) {
           query += ' AND cs.staff_id = ?';
           params.push(args.value);

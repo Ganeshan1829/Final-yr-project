@@ -676,9 +676,16 @@ export function previewChange(
   // TYPE 3: INTAKE CHANGE
   // =========================================================================
   else if (type === 'intake') {
-    const { section_id, new_size } = payload;
+    let { section_id } = payload;
+    const { new_size } = payload;
     if (!section_id || !new_size || typeof new_size !== 'number') {
       throw new Error('Intake change requires section_id and new_size.');
+    }
+    // Accept a section label (e.g. CS301-S1) as well as the numeric section id
+    const byLabel = db.prepare('SELECT section_id FROM sections WHERE section_label = ? COLLATE NOCASE').get(String(section_id)) as any;
+    if (byLabel) {
+      section_id = byLabel.section_id;
+      payload.section_id = section_id;
     }
 
     const sec = db.prepare(`

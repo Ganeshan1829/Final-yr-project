@@ -155,7 +155,7 @@ function runMockLLM(
       };
     } else if (lower.includes('intake') || lower.includes('students') || lower.includes('மாணவர்கள்')) {
       const sizeMatch = lower.match(/\b(\d{2,3})\b/);
-      const secMatch = userMessage.match(/\b([A-Z0-9]+-[A-Z])\b/i);
+      const secMatch = userMessage.match(/\b([A-Z0-9]+-[A-Z]\d*)\b/i);
       return {
         toolName: 'preview_what_if',
         toolArgs: {
@@ -199,7 +199,7 @@ function runMockLLM(
         toolArgs: {},
       };
     }
-    const roomMatch = userMessage.match(/\b(LH\d+|LAB\d+|HALL\d+|R\d+)\b/i);
+    const roomMatch = userMessage.match(/\b(LH-?\d+|LAB-?\d+|HALL-?\d+|AUD-?\d+|SEM-?\d+|R\d+)\b/i);
     return {
       toolName: 'preview_add_event',
       toolArgs: {
@@ -207,7 +207,7 @@ function runMockLLM(
         date: resolveDateForQuery(userMessage),
         start_period: 2,
         end_period: 4,
-        venue_room_id: roomMatch ? roomMatch[1].toUpperCase() : 'LH1',
+        venue_room_id: roomMatch ? roomMatch[1].toUpperCase().replace(/^([A-Z]+)(\d)/, '$1-$2') : 'LH-101',
       },
     };
   }
@@ -215,7 +215,7 @@ function runMockLLM(
   // 7. Preview Intake change: "Change intake of CS301-A to 40"
   if (lower.includes('intake') || lower.includes('resize') || lower.includes('மாணவர் சேர்க்கை')) {
     const sizeMatch = lower.match(/\b(\d{2,3})\b/);
-    const secMatch = userMessage.match(/\b([A-Z0-9]+-[A-Z])\b/i);
+    const secMatch = userMessage.match(/\b([A-Z0-9]+-[A-Z]\d*)\b/i);
     return {
       toolName: 'preview_change_intake',
       toolArgs: {
@@ -241,7 +241,7 @@ function runMockLLM(
         toolArgs: { kind: 'timetable' },
       };
     }
-    const secMatch = userMessage.match(/\b([A-Z0-9]+-[A-Z])\b/i);
+    const secMatch = userMessage.match(/\b([A-Z0-9]+-[A-Z]\d*)\b/i);
     const staffMatch = userMessage.match(/\b(STF\d+)\b/i);
     if (secMatch) {
       return {
@@ -308,6 +308,8 @@ function formatToolResponseText(
         return `வகுப்பு அளவு பரிந்துரைகள் புதுப்பிக்கப்பட்டன (${result.stored} கணிப்புகள்). இவை ஆலோசனை மட்டுமே; இறுதி முடிவை ஒதுக்கீட்டு இயந்திரம் எடுக்கும்.`;
       case 'suggest_student_distribution':
         return `${result.subject_code} பாடத்திற்கான பரிந்துரைக்கப்பட்ட மாணவர் பகிர்வு (${result.total_students} மாணவர்கள்): ${result.teachers.map((t: any) => `${t.staff_name || t.staff_id} -> ${t.students}`).join('; ')}. எதுவும் மாற்றப்படவில்லை.`;
+      case 'get_timetable':
+        return `${result.scope} அட்டவணையில் ${result.count ?? (result.sessions || []).length} வகுப்புகள் உள்ளன.`;
       case 'insights':
         return `கால அட்டவணை பகுப்பாய்வு: குறைந்த பயன்பாட்டு அறைகள்: ${result.underused_rooms.length}, வீணாகும் இருக்கைகள் உள்ள வகுப்புகள்: ${result.wasted_seat_allocations.length}, பற்றாக்குறை அபாயம் உள்ள பாடங்கள்: ${result.shortfall_risks.length}.`;
       default:
@@ -333,6 +335,12 @@ function formatToolResponseText(
       return `ML class-size recommendations refreshed (batch ${result.batch_id}, model ${result.model}): ${result.stored} teacher/subject predictions stored. These are advisory targets only; teacher maximums and room capacity are still enforced by the allocation engine.`;
     case 'suggest_student_distribution':
       return `Suggested distribution for ${result.subject_code} (${result.total_students} students, room capacity ${result.room_capacity}): ${result.teachers.map((t: any) => `${t.staff_name || t.staff_id} -> ${t.students} (preferred ${t.preferred}, max ${t.max}${t.ml_expected != null ? `, ML ${Math.round(t.ml_expected)}` : ''})`).join('; ')}.${result.unallocated > 0 ? ` ${result.unallocated} student(s) could not be placed within limits.` : ''}${result.ml_note ? ` Note: ${result.ml_note}` : ''} Read-only; nothing was changed.`;
+    case 'get_timetable': {
+      const sessions: any[] = result.sessions || [];
+      if (sessions.length === 0) return `No scheduled sessions found for ${result.scope}.`;
+      const shown = sessions.slice(0, 15).map((x: any) => `${x.date} P${x.period} ${x.subject_code} (${x.section_id}) ${x.room_name || x.room_id}${x.staff_name ? ' - ' + x.staff_name : ''}`);
+      return `Found ${result.count ?? sessions.length} session(s) for ${result.scope}: ${shown.join(' | ')}${sessions.length > 15 ? ` ... and ${sessions.length - 15} more` : ''}.`;
+    }
     case 'insights':
       return `Timetable Insights Summary: Found ${result.underused_rooms.length} underutilized rooms (<40%), ${result.wasted_seat_allocations.length} section-room allocations with large wasted seat margins, and ${result.shortfall_risks.length} subjects at risk of shortfall.`;
     default:
@@ -451,7 +459,7 @@ export async function processChatMessage(
     } else {
       replyText = isWhatIf
         ? `What-if Simulation complete. Affected sessions: ${preview.impact_summary.sessions_affected_count}. This is a hypothetical simulation only and cannot be confirmed.`
-        : `Preview generated successfully. Affected sessions: ${preview.impact_summary.sessions_affected_count}, Clashes: ${preview.impact_summary.clashes_count}. Please review the diff and click the Confirm button below to apply.`;
+        : `Preview generated successfully. Affected sessions: ${preview.impact_summary.sessions_affected_count}, Clashes: ${preview.impact_summary.new_clashes}. Please review the diff and click the Confirm button below to apply.`;
     }
 
     return {

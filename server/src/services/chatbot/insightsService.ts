@@ -48,13 +48,15 @@ export function computeTimetableInsights(options?: {
   const wastedMin = options?.wastedSeatsMin ?? 15;
 
   // 1. Room utilization
-  const totalSlotsCount = (db.prepare('SELECT COUNT(DISTINCT date || "-" || period) as total FROM calendar_sessions').get() as any)?.total || 1;
+  // Utilization is measured on the weekly timetable (always present once solved), as a share of
+  // the weekly day x period grid.
+  const grid = db.prepare('SELECT COUNT(DISTINCT day_of_week) as d, MAX(period) as p FROM timetable_slots').get() as any;
+  const totalSlotsCount = Math.max(1, (grid?.d || 5) * (grid?.p || 7));
   const rooms = db.prepare('SELECT room_id as id, room_name as name, capacity, room_type as type FROM rooms').all() as any[];
   
   const roomUsage = db.prepare(`
     SELECT room_id, COUNT(*) as booked
-    FROM calendar_sessions
-    WHERE session_type = 'regular'
+    FROM timetable_slots
     GROUP BY room_id
   `).all() as any[];
   const roomUsageMap = new Map(roomUsage.map((u) => [u.room_id, u.booked]));
@@ -154,10 +156,11 @@ export function computeTimetableInsights(options?: {
 
   // 4. Shortfall risks
   const shortfallRows = db.prepare(`
-    SELECT subject_code, subject_name, section_label, required_hours, delivered_hours, shortfall_hours
-    FROM hours_summary
-    WHERE shortfall_hours > 0
-    ORDER BY shortfall_hours DESC
+    SELECT h.subject_code, h.subject_name, sec.section_label, h.required_hours, h.delivered_hours, h.shortfall_hours
+    FROM hours_summary h
+    LEFT JOIN sections sec ON sec.section_id = h.section_id
+    WHERE h.shortfall_hours > 0
+    ORDER BY h.shortfall_hours DESC
   `).all() as any[];
 
   const shortfall_risks = shortfallRows.map((r) => ({
