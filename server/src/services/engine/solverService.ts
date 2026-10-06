@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { pythonBin } from '../../env.js';
 import { fileURLToPath } from 'node:url';
 import { db } from '../../db.js';
 import { getStoredRules } from '../rulesService.js';
@@ -57,7 +58,7 @@ export function getSolverStatus() {
  */
 export async function checkPythonEnvironment(): Promise<{ ready: boolean; version?: string; error?: string }> {
   return new Promise((resolve) => {
-    const proc = spawn('python', ['-c', 'import ortools; print(ortools.__version__)']);
+    const proc = spawn(pythonBin(), ['-c', 'import ortools; print(ortools.__version__)']);
     let stdout = '';
     let stderr = '';
 
@@ -213,7 +214,7 @@ export async function runWeeklySolver(timeLimitSeconds = 60): Promise<SolverRunS
     solverProgress = 50;
 
     const solverResult = await new Promise<any>((resolve, reject) => {
-      const proc = spawn('python', [engineScript, '--input', tmpInput, '--output', tmpOutput]);
+      const proc = spawn(pythonBin(), [engineScript, '--input', tmpInput, '--output', tmpOutput]);
 
       let stderr = '';
       proc.stderr.on('data', (d) => {

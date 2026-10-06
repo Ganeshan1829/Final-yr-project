@@ -1,1 +1,4 @@
 .test-data/
+.setup.log
+.venv/
+.env
