@@ -2,3 +2,23 @@
 .setup.log
 .venv/
 .env
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+.vite/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime data
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+server/exports/
+server/uploads/
