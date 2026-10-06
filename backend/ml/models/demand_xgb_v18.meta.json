@@ -1,0 +1,71 @@
+{
+  "params": {
+    "n_estimators": 1500,
+    "learning_rate": 0.03,
+    "max_depth": 5,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "min_child_weight": 3,
+    "reg_lambda": 2.0,
+    "enable_categorical": true,
+    "tree_method": "hist",
+    "early_stopping_rounds": 60,
+    "random_state": 42
+  },
+  "categories": {
+    "department": [
+      "AIDS",
+      "CIVIL",
+      "CSBS",
+      "CSE",
+      "ECE",
+      "EEE",
+      "IT",
+      "MECH"
+    ],
+    "term": [
+      "Even",
+      "Odd"
+    ],
+    "course_type": [
+      "core",
+      "elective"
+    ],
+    "topic_category": [
+      "ai_ml",
+      "blockchain",
+      "cloud",
+      "data",
+      "general",
+      "green_energy",
+      "humanities_mgmt",
+      "iot_robotics",
+      "security",
+      "software"
+    ]
+  },
+  "best_iteration": 425,
+  "residual_std": 4.070171563753073,
+  "feature_names": [
+    "department",
+    "term",
+    "course_type",
+    "topic_category",
+    "semester_no",
+    "cohort_size",
+    "industry_demand_index",
+    "prev_year_registered",
+    "staff_available",
+    "credits",
+    "has_lab",
+    "topic_trend_index",
+    "rival_elective_trend",
+    "dept_placement_rate_prev",
+    "prereq_pass_rate",
+    "course_age_years",
+    "is_first_offering",
+    "covid_flag",
+    "prev2_year_registered",
+    "registered_trend_3y"
+  ]
+}
