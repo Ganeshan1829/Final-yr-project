@@ -7,6 +7,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 # Database configuration (shared SQLite DB with Express backend)
 DB_PATH = Path(os.environ.get("SQLITE_DB_PATH", BASE_DIR / "server" / "data" / "app.db"))
 
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)  # fresh clones have no server/data yet
+
 # Models storage directory
 MODELS_DIR = BASE_DIR / "backend" / "ml" / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
